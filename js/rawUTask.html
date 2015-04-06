@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>RAW MicroTask (no promise) test</title>
+
+  <script src="../zone.js"></script>
+  <script src="../inner-zone.js"></script>
+</head>
+<body>
+
+  <h1>MicroTask</h1>
+
+
+  <script>
+
+    var outer;
+
+//    outer = zone.fork({
+//      beforeTask: function () { console.log('>>> beforeTask'); },
+//      afterTask: function () { console.log('<<< afterTask'); }
+//    });
+
+    outer = zone.fork({
+      beforeTurn: function () { console.log('#### Before turn'); },
+      afterTurn: function () { console.log('#### After turn'); },
+    });
+
+    var inner = outer.fork(Zone.vmTurnAware);
+
+    // temp hack
+    Zone.inner = inner;
+
+    function main() {
+      zone.scheduleMicrotask(function() { console.log('inner ut 1')});
+      zone.scheduleMicrotask(function() { console.log('inner ut 2')});
+      outer.scheduleMicrotask(function() { console.log('outer ut 1')});
+      outer.scheduleMicrotask(function() { console.log('outer ut 2')});
+    }
+
+    function mainOuter() {
+      zone.scheduleMicrotask(function() { console.log('outer ut 1')});
+      zone.scheduleMicrotask(function() { console.log('outer ut 2')});
+      inner.scheduleMicrotask(function() { console.log('inner ut 1')});
+      inner.scheduleMicrotask(function() { console.log('inner ut 2')});
+      inner.scheduleMicrotask(function() { console.log('inner ut 3')});
+
+    }
+
+    function nestedInner() {
+      zone.scheduleMicrotask(function() {
+        console.log('inner');
+        zone.scheduleMicrotask(function() { console.log('inner nested'); });
+      })
+    }
+
+    console.log('>>> script 0');
+
+    inner.run(main);
+
+    console.log('>>> script 1');
+
+    outer.run(mainOuter);
+
+    console.log('>>> script 2');
+
+    inner.run(nestedInner);
+
+    console.log('>>> script 3');
+
+    var nested = false;
+
+    var inner2 = outer
+      .fork(Zone.vmTurnAware)
+      .fork({
+        beforeTurn: function () { console.log('#### Before turn'); },
+        afterTurn: function () {
+          if (!nested) {
+            console.log('#### afterTurn() -> enqueue 2 mits');
+            zone.scheduleMicrotask(function() { console.log('ut onTurnDone 1')});
+            zone.scheduleMicrotask(function() { console.log('ut onTurnDone 2')});
+            nested = true;
+          } else {
+            console.log('### afterTurn')
+          }
+        },
+      });
+
+    // hack
+    Zone.inner = inner2;
+
+    function turnDoneNested() {
+      zone.scheduleMicrotask(function() { console.log('turnDoneNested')});
+    }
+
+    inner2.run(turnDoneNested);
+
+  </script>
+</body>
+</html>

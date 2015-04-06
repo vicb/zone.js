@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MicroTask test</title>
+
+  <!--
+  previous tests, not used any more
+  <script src="../promise.js"></script>
+  -->
+
+  <script src="../../es6-promise/dist/es6-promise.js"></script>
+  <script src="../zone.js"></script>
+  <script src="../inner-zone.js"></script>
+</head>
+<body>
+
+  <h1>MicroTask</h1>
+
+
+  <script>
+
+
+    function main() {
+      var resa, resb;
+
+      pa = new Promise(function(res) {resa = res;});
+      pb = new Promise(function(res) {resb = res;});
+
+      inner.run(function() {
+        console.log('run in ', zone._name);
+        pa.then(function() { console.log('a in ', zone._name, Zone.drainingMicrotasks)});
+        pb.then(function() { console.log('b in ', zone._name, Zone.drainingMicrotasks)});
+      });
+
+      resa(null);
+      resb(null);
+    }
+
+
+    outer = zone.fork({
+      _name: 'outer',
+      beforeTurn: function () { console.log('#### Before turn'); },
+      afterTurn: function () { console.log('#### After turn'); },
+    });
+
+    var inner = outer.fork(Zone.vmTurnAware).fork({_name: 'inner'});
+
+    // temp hack
+    Zone.inner = inner;
+
+    outer.run(main);
+
+
+  </script>
+</body>
+</html>

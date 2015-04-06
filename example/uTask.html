@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MicroTask test</title>
+  <link rel="stylesheet" href="style.css">
+
+  <!--
+  <script src="../promise.js"></script>
+  -->
+
+  <script src="../../es6-promise/dist/es6-promise.js"></script>
+  <script src="../zone.js"></script>
+</head>
+<body>
+
+  <h1>MicroTask</h1>
+
+
+  <script>
+    var mainId;
+    var p1, p2;
+
+    function main() {
+      mainId = zone.$id;
+      var resolve;
+
+      console.log('Main is executed in zone', mainId);
+
+      var p2 = Promise.resolve('resolve()');
+
+      p2.then(function(_) {
+          console.log('uTask(%s) #1 scheduled in %s, executed in %s', _, mainId, window.zone.$id);
+          return _;
+        })
+        .then(function(_) {
+          console.log('uTask(%s) #2 scheduled in %s, executed in %s', _, mainId, window.zone.$id);
+        });
+
+      p1 = new Promise(function (rs, rj) {
+        resolve = rs;
+      });
+
+      // uTask(resolved in zone 4) #3 scheduled in 3, executed in 4
+      // should this execute in 3 ?
+      p1.then(function(_) {
+        console.log('uTask(%s) #3 scheduled in %s, executed in %s', _, mainId, window.zone.$id);
+      });
+
+      zone.fork().run(function() {
+        var forkId = zone.$id;
+
+        console.log('Fork is executed in zone', forkId);
+
+        p1.then(function(_) {
+          console.log('uTask(%s) #4 scheduled in %s, executed in %s', _, forkId, window.zone.$id);
+        });
+
+        p2.then(function(_) {
+          console.log('uTask(%s) #5 scheduled in %s, executed in %s', _, forkId, window.zone.$id);
+        });
+
+        resolve('resolved in zone ' + forkId);
+      });
+
+
+    }
+
+    zone
+      .fork({
+        beforeTask: function () { console.log('>>> beforeTask'); },
+        afterTask: function () { console.log('<<< afterTask'); }
+      })
+      .run(main);
+
+  </script>
+</body>
+</html>
