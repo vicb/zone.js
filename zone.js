@@ -54,7 +54,6 @@ function Zone(parentZone, data) {
   return zone;
 }
 
-
 Zone.prototype = {
   constructor: Zone,
 
@@ -80,6 +79,13 @@ Zone.prototype = {
     });
   },
 
+  scheduleMicrotask: function (fn) {
+    var executionZone = this;
+    Zone.microtaskQueue.push(function() {
+      executionZone.run(fn);
+    });
+  },
+
   run: function run (fn, applyTo, applyWith) {
     applyWith = applyWith || [];
 
@@ -89,8 +95,9 @@ Zone.prototype = {
     exports.zone = zone = this;
 
     try {
+      Zone.nestedRun++;
       this.beforeTask();
-      result = fn.apply(applyTo, applyWith);
+      return fn.apply(applyTo, applyWith);
     } catch (e) {
       if (zone.onError) {
         zone.onError(e);
@@ -99,11 +106,32 @@ Zone.prototype = {
       }
     } finally {
       this.afterTask();
+      Zone.nestedRun--;
+      // Check if there are microtasks to execute unless:
+      // - we are already executing them (drainingMicrotasks is true),
+      // - we are in a recursive call to run (nesetdRun > 0)
+      if (!Zone.drainingMicrotasks && Zone.nestedRun == 0) {
+        this.runMicrotasks();
+      }
       exports.zone = zone = oldZone;
     }
-    return result;
   },
 
+  runMicrotasks: function () {
+    Zone.drainingMicrotasks = true;
+    do {
+      // Drain the microtask queue
+      while (Zone.microtaskQueue.length > 0) {
+        var microtask = Zone.microtaskQueue.shift();
+        microtask();
+      }
+      this.afterTurn();
+      // Check the queue length again as afterTurn might have enqueued more microtasks
+    } while (Zone.microtaskQueue.length > 0)
+    Zone.drainingMicrotasks = false;
+  },
+
+  afterTurn: function() {},
   beforeTask: function () {},
   onZoneCreated: function () {},
   afterTask: function () {},
@@ -160,7 +188,12 @@ Zone.patchSetClearFn = function (obj, fnNames) {
 };
 
 Zone.nextId = 1;
-
+// Pending microtasks to be executed after the macrotask
+Zone.microtaskQueue = [];
+// Whether we are currently draining the microtask queue
+Zone.drainingMicrotasks = false;
+// Recursive calls to run
+Zone.nestedRun = 0;
 
 Zone.patchSetFn = function (obj, fnNames) {
   fnNames.forEach(function (name) {
@@ -402,13 +435,14 @@ Zone.patch = function patch () {
     Zone.patchWebSocket();
   }
 
-  // patch promises
-  if (window.Promise) {
-    Zone.patchPrototype(Promise.prototype, [
-      'then',
-      'catch'
-    ]);
-  }
+  // Do not patch promises when using out own version supporting microtasks
+  //// patch promises
+  //if (window.Promise) {
+  //  Zone.patchPrototype(Promise.prototype, [
+  //    'then',
+  //    'catch'
+  //  ]);
+  //}
   Zone.patchMutationObserverClass('MutationObserver');
   Zone.patchMutationObserverClass('WebKitMutationObserver');
   Zone.patchDefineProperty();
